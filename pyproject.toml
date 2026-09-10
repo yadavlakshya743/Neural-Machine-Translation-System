@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neural-machine-translation-platform"
+version = "0.1.0"
+description = "Generative AI Neural Machine Translation & Localization Platform for English <-> Hindi using custom Transformer architecture."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Lakshya Yadav", email = "yadavlakshya743@gmail.com"}
+]
+keywords = [
+    "deep-learning",
+    "neural-machine-translation",
+    "generative-ai",
+    "transformer",
+    "nlp",
+    "english-hindi",
+    "iit-bombay-corpus",
+    "fastapi",
+    "pytorch"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ml*", "backend*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
