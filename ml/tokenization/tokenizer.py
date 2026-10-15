@@ -70,19 +70,19 @@ class SubwordTokenizer:
         model_prefix: str,
         vocab_size: int = 16000,
         model_type: str = "bpe",
+        character_coverage: float = 1.0,
     ):
         """Trains a SentencePiece model on a text corpus file."""
         import sentencepiece as spm
 
-        cmd = (
-            f"--input={input_file} "
-            f"--model_prefix={model_prefix} "
-            f"--vocab_size={vocab_size} "
-            f"--model_type={model_type} "
-            f"--pad_id={SubwordTokenizer.PAD_ID} "
-            f"--bos_id={SubwordTokenizer.SOS_ID} "
-            f"--eos_id={SubwordTokenizer.EOS_ID} "
-            f"--unk_id={SubwordTokenizer.UNK_ID} "
-            f"--user_defined_symbols='' "
+        spm.SentencePieceTrainer.train(
+            input=input_file,
+            model_prefix=model_prefix,
+            vocab_size=vocab_size,
+            model_type=model_type,
+            character_coverage=character_coverage,
+            pad_id=SubwordTokenizer.PAD_ID,
+            bos_id=SubwordTokenizer.SOS_ID,
+            eos_id=SubwordTokenizer.EOS_ID,
+            unk_id=SubwordTokenizer.UNK_ID,
         )
-        spm.SentencePieceTrainer.train(cmd)

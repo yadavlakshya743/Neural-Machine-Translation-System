@@ -9,6 +9,9 @@ from ml.transformer.model import TransformerSeq2Seq
 from ml.tokenization.tokenizer import SubwordTokenizer
 
 
+from tqdm import tqdm
+
+
 class LabelSmoothingLoss(nn.Module):
     """Cross Entropy loss with label smoothing to prevent overconfident predictions."""
 
@@ -64,8 +67,9 @@ class Trainer:
     def train_epoch(self, epoch: int) -> float:
         self.model.train()
         total_loss = 0.0
+        pbar = tqdm(self.train_loader, desc=f"Epoch {epoch:02d} [Train]", unit="batch")
 
-        for batch_idx, (src, tgt) in enumerate(self.train_loader):
+        for batch_idx, (src, tgt) in enumerate(pbar):
             src, tgt = src.to(self.device), tgt.to(self.device)
 
             # Teacher forcing: input to decoder is tgt[:, :-1], expected target is tgt[:, 1:]
@@ -85,6 +89,8 @@ class Trainer:
             self.optimizer.step()
 
             total_loss += loss.item()
+            avg_so_far = total_loss / (batch_idx + 1)
+            pbar.set_postfix({"loss": f"{loss.item():.4f}", "avg_loss": f"{avg_so_far:.4f}"})
 
         avg_loss = total_loss / max(1, len(self.train_loader))
         return avg_loss
@@ -95,9 +101,10 @@ class Trainer:
 
         self.model.eval()
         total_loss = 0.0
+        pbar = tqdm(self.val_loader, desc="           [Val]  ", unit="batch")
 
         with torch.no_grad():
-            for src, tgt in self.val_loader:
+            for batch_idx, (src, tgt) in enumerate(pbar):
                 src, tgt = src.to(self.device), tgt.to(self.device)
                 tgt_input = tgt[:, :-1]
                 tgt_expected = tgt[:, 1:]
@@ -107,6 +114,8 @@ class Trainer:
                     logits.reshape(-1, logits.size(-1)), tgt_expected.reshape(-1)
                 )
                 total_loss += loss.item()
+                avg_so_far = total_loss / (batch_idx + 1)
+                pbar.set_postfix({"val_loss": f"{loss.item():.4f}", "avg_val": f"{avg_so_far:.4f}"})
 
         return total_loss / max(1, len(self.val_loader))
 
@@ -121,4 +130,5 @@ class Trainer:
         if extra_meta:
             meta.update(extra_meta)
         torch.save(meta, path)
-        print(f"[*] Checkpoint saved at {path}")
+        print(f"[+] Best checkpoint saved: {path} (Val Loss: {val_loss:.4f})")
+

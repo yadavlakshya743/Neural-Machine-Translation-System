@@ -10,6 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Dataset](https://img.shields.io/badge/Dataset-IIT_Bombay_En--Hi-orange.svg)](https://www.cfilt.iitb.ac.in/iitb_parallel/)
 [![Architecture](https://img.shields.io/badge/Architecture-Custom_Transformer-darkgreen.svg)](#core-transformer-architecture)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yadavlakshya743/Neural-Machine-Translation-System/blob/main/experiments/train_colab.ipynb)
 
 **An End-to-End Generative AI Translation & Localization Platform for English ↔ Hindi**  
 *Grounded in "Attention Is All You Need" (NeurIPS 2017) • Trained on the Official IIT Bombay Parallel Corpus*

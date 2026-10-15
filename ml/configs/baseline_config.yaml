@@ -5,8 +5,8 @@
 
 model:
   name: "transformer_en_hi_baseline"
-  src_vocab_size: 16000
-  tgt_vocab_size: 16000
+  src_vocab_size: 8000    # Trained SentencePiece BPE vocabulary size
+  tgt_vocab_size: 8000    # Trained SentencePiece BPE vocabulary size
   d_model: 256            # 256 for rapid baseline, 512 for standard
   n_heads: 8
   n_encoder_layers: 4     # 4 for baseline, 6 for standard
@@ -24,19 +24,21 @@ data:
   tgt_lang: "hi"
   max_src_len: 128
   max_tgt_len: 128
-  batch_size: 64
-  num_workers: 4
+  batch_size: 32
+  num_workers: 2
+  max_train_samples: 5000 # Fast baseline subset (set 0 or null for full dataset)
 
 training:
-  epochs: 20
+  epochs: 3
   learning_rate: 0.0005
-  warmup_steps: 4000
+  warmup_steps: 500
   label_smoothing: 0.1
   grad_clip: 1.0
   weight_decay: 0.0001
-  save_every_epoch: 2
+  save_every_epoch: 1
   checkpoint_dir: "models"
-  log_interval: 100
+  checkpoint_name: "best_transformer_en_hi.pt"
+  log_interval: 20
 
 decoding:
   strategy: "beam_search"

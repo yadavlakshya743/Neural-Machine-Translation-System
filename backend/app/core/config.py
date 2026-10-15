@@ -4,9 +4,10 @@ import os
 from typing import List
 
 try:
-    from pydantic_settings import BaseSettings
+    from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError:
     from pydantic import BaseModel as BaseSettings
+    SettingsConfigDict = None
 
 
 class Settings(BaseSettings):
@@ -39,10 +40,13 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = "allow"
+    if SettingsConfigDict:
+        model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="allow")
+    else:
+        class Config:
+            env_file = ".env"
+            case_sensitive = True
+            extra = "allow"
 
 
 settings = Settings()
