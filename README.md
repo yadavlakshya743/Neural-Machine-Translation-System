@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Dataset](https://img.shields.io/badge/Dataset-IIT_Bombay_En--Hi-orange.svg)](https://www.cfilt.iitb.ac.in/iitb_parallel/)
 [![Architecture](https://img.shields.io/badge/Architecture-Custom_Transformer-darkgreen.svg)](#core-transformer-architecture)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yadavlakshya743/Neural-Machine-Translation-System/blob/main/experiments/train_colab.ipynb)
+[![Train on Kaggle](https://img.shields.io/badge/Train-Kaggle_notebook-20BEFF.svg?logo=kaggle&logoColor=white)](experiments/train_kaggle.ipynb)
 
 **An End-to-End Generative AI Translation & Localization Platform for English ↔ Hindi**  
 *Grounded in "Attention Is All You Need" (NeurIPS 2017) • Trained on the Official IIT Bombay Parallel Corpus*
@@ -31,8 +31,8 @@
 - [8. Repository Structure](#8-repository-structure)
 - [9. Quickstart & Installation](#9-quickstart--installation)
   - [Prerequisites](#prerequisites)
-  - [Backend & ML Setup](#backend--ml-setup)
-  - [Frontend Workspace Setup](#frontend-workspace-setup)
+  - [Data, training & evaluation](#2-data-1-minute-after-download)
+  - [Run the application](#5-run-the-application)
 - [10. API Specifications](#10-api-specifications)
 - [11. 12-Week Project Roadmap](#11-12-week-project-roadmap)
 - [12. Architecture Decision Records (ADRs)](#12-architecture-decision-records-adrs)
@@ -206,67 +206,28 @@ To reflect holistic translation quality, evaluation uses both n-gram precision (
 
 ```
 Neural-Machine-Translation-System/
-├── README.md                      # Primary project documentation & architecture guide
-├── pyproject.toml                 # Package definition & tool configs
-├── requirements.txt               # Pinned Python dependencies
-├── .env.example                   # Environment configuration template
-├── .gitignore                     # Git exclusion rules
-│
-├── docs/                          # Comprehensive architectural specifications & PRD
-│   ├── Neural_Machine_Translation_PRD.md
-│   └── Neural_Machine_Translation_Complete_Project_Documentation.md
-│
-├── ml/                            # Machine Learning Core
-│   ├── configs/                   # Experiment & baseline YAML configs
-│   │   └── baseline_config.yaml
-│   ├── data/                      # Dataset loaders, cleaning & batch collation
-│   │   ├── dataset.py
-│   │   └── preprocess.py
-│   ├── tokenization/              # Subword tokenizer training & wrapper
-│   │   └── tokenizer.py
-│   ├── transformer/               # Modular PyTorch Transformer implementation
-│   │   ├── attention.py           # Scaled dot-product & Multi-Head Attention
-│   │   ├── embedding.py           # Token embeddings & sinusoidal positional encodings
-│   │   ├── encoder.py             # Encoder layers & encoder stack
-│   │   ├── decoder.py             # Masked decoder layers & cross-attention stack
-│   │   └── model.py               # Complete Seq2Seq Transformer model
-│   ├── decoding/                  # Decoding strategies
-│   │   └── strategy.py            # Greedy Search & Beam Search implementations
-│   ├── training/                  # Training pipeline & checkpoint manager
-│   │   └── trainer.py
-│   ├── inference/                 # High-level translation interface
-│   │   └── translator.py
-│   └── evaluation/                # SacreBLEU & chrF++ calculation pipelines
-│       └── evaluator.py
-│
-├── backend/                       # FastAPI Serving Layer
-│   └── app/
-│       ├── main.py                # App entrypoint, lifespan & CORS
-│       ├── core/
-│       │   └── config.py          # Pydantic settings management
-│       ├── schemas/
-│       │   ├── translation.py     # Request/Response validation models
-│       │   └── health.py          # System probe schemas
-│       ├── services/
-│       │   └── translation_service.py # Model orchestration service
-│       └── api/
-│           └── v1/
-│               └── routes.py      # REST endpoints for translations, health & info
-│
-├── frontend/                      # React + Tailwind Localization Workspace
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   ├── index.html
-│   └── src/
-│       ├── App.jsx                # Localization Studio UI
-│       └── index.css              # Custom styling & utility classes
-│
-├── models/                        # Saved checkpoints (.pt) [Git-ignored]
-├── experiments/                   # Experiment metrics & evaluation reports
-└── tests/                         # Automated test suite
-    ├── test_transformer.py        # Model tensor shape & attention tests
-    └── test_api.py                # FastAPI endpoint integration tests
+├── docs/                          PRD + complete project documentation
+├── ml/                            Machine-learning core (PyTorch, no pre-trained models)
+│   ├── transformer/               embedding.py, attention.py, encoder.py, decoder.py, model.py
+│   ├── tokenization/tokenizer.py  SentencePiece BPE wrapper (+ trained spm_en/spm_hi.model)
+│   ├── data/                      preprocess.py (normalization/filters), dataset.py (token-bucket batching)
+│   ├── training/trainer.py        warmup + inverse-sqrt LR, AMP, accumulation, checkpoint/resume
+│   ├── decoding/strategy.py       batched greedy + beam search (length penalty)
+│   ├── inference/                 translator.py (text in/out), loader.py (checkpoint + tokenizer checks)
+│   ├── evaluation/evaluator.py    sacreBLEU BLEU + chrF++ with signatures
+│   └── configs/                   baseline_config.yaml (small, laptop), transformer_base.yaml (Kaggle)
+├── scripts/
+│   ├── prepare_data.py            download IITB, clean, dedupe, leakage check, train tokenizers
+│   ├── train.py                   train one direction (--direction en-hi | hi-en), resumable
+│   ├── evaluate.py                BLEU/chrF++ on the official test split -> eval_*.json
+│   ├── make_report.py             experiments/evaluation_report.md (comparisons + error analysis)
+│   ├── training_status.py         progress of every run; prints DONE when training has finished
+│   ├── train_baseline_local.ps1   train + evaluate both directions on a local GPU (Windows)
+│   └── make_kaggle_bundle.py      zip the code for a Kaggle dataset
+├── experiments/train_kaggle.ipynb Kaggle notebook: Transformer-base, both directions on T4 x2
+├── models/<run>/                  best.pt, last.pt, metrics.json, config.yaml, tokenizers, eval reports
+├── backend/app/                   FastAPI: auth (JWT), SQLite history, models, evaluations, health
+└── frontend/src/                  React + Tailwind + Axios: login, translate, history, evaluation dashboard
 ```
 
 ---
@@ -274,104 +235,90 @@ Neural-Machine-Translation-System/
 ## 9. Quickstart & Installation
 
 ### Prerequisites
-- **Operating System**: Linux / macOS / Windows WSL2
-- **Python**: Version 3.10 or higher
-- **Node.js**: Version 18 or higher (for frontend)
-- **CUDA Toolkit** (Optional): CUDA 11.8 / 12.1 for GPU-accelerated training
+Python 3.10+ (3.11 tested), Node.js 18+, optionally an NVIDIA GPU with CUDA.
 
-### Backend & ML Setup
+### 1. Python environment
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate      Linux/macOS: source .venv/bin/activate
+pip install torch --index-url https://download.pytorch.org/whl/cu124   # or the CPU wheel
+pip install -r requirements.txt
+cp .env.example .env        # then set SECRET_KEY (see the comment in the file)
+```
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/yadavlakshya743/Neural-Machine-Translation-System.git
-   cd Neural-Machine-Translation-System
-   ```
+### 2. Data (≈1 minute after download)
+```bash
+python scripts/prepare_data.py            # full corpus, 16k BPE per language
+```
+Result on the official split: 1,659,083 raw training pairs → 62,795 removed by filters,
+229,200 duplicates removed, 0 overlapping with dev/test → **1,367,088 training pairs**;
+dev 520, test 2,507 (unchanged). Details: `data/processed/data_report.json`.
 
-2. **Create and activate a virtual environment**:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
+### 3. Train
+```bash
+# Small baseline (15.6M params) on a local GPU, both directions + evaluation:
+powershell -ExecutionPolicy Bypass -File scripts\train_baseline_local.ps1     # Windows
+# or one direction on any OS:
+python scripts/train.py --config ml/configs/baseline_config.yaml --direction en-hi --resume auto
+```
+* `--resume auto` continues from `models/<run>/last.pt` (mid-epoch); `--max_hours N` stops cleanly.
+* `best.pt` is selected by **dev BLEU**; the test set is never used for training decisions.
+* Full-size model: open `experiments/train_kaggle.ipynb` on Kaggle (GPU T4 x2) — it trains
+  both directions in parallel and resumes across 12-hour sessions (instructions inside).
 
-3. **Install Python dependencies**:
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
+### 4. Evaluate and report
+```bash
+python scripts/evaluate.py --checkpoint models/transformer_small_en-hi/best.pt --strategy beam_search
+python scripts/make_report.py             # -> experiments/evaluation_report.md
+```
 
-4. **Configure environment variables**:
-   ```bash
-   cp .env.example .env
-   ```
+### 5. Run the application
+```bash
+uvicorn backend.app.main:app --port 8000          # API + Swagger at http://localhost:8000/docs
+cd frontend && npm install && npm run dev         # UI at http://localhost:5173
+```
+Create an account on the login screen, then translate. Use `DEVICE=cpu` in `.env` while a
+training job is using the GPU.
 
-5. **Run automated test suite**:
-   ```bash
-   pytest tests/ -v
-   ```
-
-6. **Launch FastAPI inference server**:
-   ```bash
-   uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-   Interactive Swagger documentation will be available at `http://localhost:8000/docs`.
-
-### Frontend Workspace Setup
-
-1. **Navigate to the frontend directory**:
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-2. **Start the development server**:
-   ```bash
-   npm run dev
-   ```
-   The Localization Workspace will be accessible at `http://localhost:5173`.
+### 6. Tests
+```bash
+pytest tests/ -q        # 28 tests: model, training pipeline, decoding, API, auth, history isolation
+```
 
 ---
 
 ## 10. API Specifications
 
-### Key Endpoints
+Base URL `/api/v1`. Errors always use one envelope:
+`{"error": {"code": "...", "message": "...", "request_id": "req_..."}}` (no stack traces).
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/health` | Service liveness probe |
-| `GET` | `/api/v1/ready` | Model readiness and GPU availability probe |
-| `GET` | `/api/v1/models/info` | Active model architecture, parameters, and metadata |
-| `POST` | `/api/v1/translations` | Generate bidirectional English ↔ Hindi translation |
-| `GET` | `/api/v1/history` | Retrieve user translation activity history |
+| Method | Endpoint | Auth | Description |
+| :--- | :--- | :---: | :--- |
+| `POST` | `/auth/register` | – | Create an account (username, password ≥ 8 chars) |
+| `POST` | `/auth/login` | – | Returns a JWT bearer token |
+| `POST` | `/auth/logout` | ✓ | Client discards the token (stateless JWT) |
+| `GET` | `/auth/me` | ✓ | Current user |
+| `POST` | `/translations` | ✓ | Translate EN↔HI; saved to the caller's history |
+| `GET` | `/translations?limit&offset` | ✓ | Caller's own history (newest first) |
+| `GET` | `/translations/{id}` | ✓ | One record — 404 if it belongs to another user |
+| `GET` | `/models/active` | – | Loaded model per direction: run, size, tokenizer sha256, best dev BLEU |
+| `GET` | `/evaluations` | – | Training curves, dev/test BLEU & chrF++, examples, data report |
+| `GET` | `/health` | – | Liveness (process up) |
+| `GET` | `/ready` | – | Readiness: 200 only when a trained model is loaded, else 503 |
 
-#### Sample Translation Request:
+Error codes: `UNAUTHORIZED`, `INVALID_CREDENTIALS`, `USERNAME_TAKEN`, `VALIDATION_ERROR`,
+`INVALID_LANGUAGE_DIRECTION`, `MODEL_NOT_AVAILABLE` (503), `INFERENCE_FAILED`, `NOT_FOUND`.
+
 ```json
-POST /api/v1/translations
-Content-Type: application/json
+POST /api/v1/translations        Authorization: Bearer <token>
+{"source_text": "I am going to college.", "source_lang": "en", "target_lang": "hi",
+ "decoding_strategy": "beam_search", "beam_size": 4, "length_penalty": 0.6, "max_length": 128}
 
-{
-  "source_text": "Machine learning enables computers to learn from data.",
-  "source_lang": "en",
-  "target_lang": "hi",
-  "decoding_strategy": "beam_search",
-  "beam_size": 4,
-  "length_penalty": 0.6,
-  "max_length": 128
-}
-```
-
-#### Sample Translation Response:
-```json
-{
-  "request_id": "req_88f219c8",
-  "source_text": "Machine learning enables computers to learn from data.",
-  "translated_text": "मशीन लर्निंग कंप्यूटर को डेटा से सीखने में सक्षम बनाता है।",
-  "source_lang": "en",
-  "target_lang": "hi",
-  "model_version": "transformer-baseline-v1",
-  "decoding_strategy": "beam_search",
-  "latency_ms": 48.2,
-  "tokens_generated": 14
-}
+200 OK
+{"request_id": "req_21a55553ff71", "translated_text": "मैं कॉलेज जा रहा हूँ।",
+ "source_lang": "en", "target_lang": "hi", "model_version": "transformer_small_en-hi",
+ "decoding_strategy": "beam_search", "beam_size": 4, "latency_ms": 74.1,
+ "tokens_generated": 9, "created_at": "2026-11-27T12:27:40+00:00"}
 ```
 
 ---

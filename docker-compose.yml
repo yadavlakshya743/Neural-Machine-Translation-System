@@ -1,0 +1,29 @@
+# docker compose up --build   ->  UI http://localhost:8080 , API docs http://localhost:8000/docs
+# Requires trained checkpoints in ./models (e.g. models/transformer_small_en-hi/best.pt) and a
+# SECRET_KEY in .env.
+services:
+  backend:
+    build: .
+    env_file: .env
+    environment:
+      DEVICE: cpu
+      DATABASE_URL: sqlite:////app/data/translation_history.db
+      ALLOWED_ORIGINS: '["http://localhost:8080"]'
+    volumes:
+      - ./models:/app/models:ro
+      - ./data/processed/data_report.json:/app/data/processed/data_report.json:ro
+      - db-data:/app/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  db-data:

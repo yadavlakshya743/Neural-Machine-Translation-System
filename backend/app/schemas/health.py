@@ -1,7 +1,8 @@
-"""Health and Readiness response schemas."""
+"""Health (liveness) and readiness (model loaded) response schemas."""
+
+from typing import List
 
 from pydantic import BaseModel
-from typing import Optional
 
 
 class HealthResponse(BaseModel):
@@ -11,8 +12,9 @@ class HealthResponse(BaseModel):
 
 
 class ReadinessResponse(BaseModel):
-    status: str
+    status: str                    # "ready" (>=1 model loaded) or "model_unavailable"
     model_loaded: bool
-    model_checkpoint: Optional[str] = None
+    loaded_directions: List[str]
+    missing_directions: List[str]
     device: str
     gpu_available: bool

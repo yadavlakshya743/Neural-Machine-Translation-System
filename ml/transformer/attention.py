@@ -35,8 +35,9 @@ class ScaledDotProductAttention(nn.Module):
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(d_k)
 
         if mask is not None:
-            # Mask out positions where mask is 0 (or False) by filling with -1e9
-            scores = scores.masked_fill(mask == 0, -1e9)
+            # Mask out positions where mask is 0/False. Use the dtype's most negative
+            # finite value: a literal -1e9 overflows float16 under mixed precision.
+            scores = scores.masked_fill(mask == 0, torch.finfo(scores.dtype).min)
 
         attention_weights = F.softmax(scores, dim=-1)
         attention_weights = self.dropout(attention_weights)

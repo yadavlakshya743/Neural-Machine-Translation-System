@@ -1,175 +1,116 @@
-"""Translation service managing model inference, tokenizer lifecycle and history."""
+"""Translation service: loads trained checkpoints once per process and runs inference.
 
+There is deliberately no placeholder/fake output: if no trained model is available for a
+direction, requests fail with MODEL_NOT_AVAILABLE (PRD: "model before wrapper").
+"""
+
+import json
+import logging
 import os
-import time
-import uuid
-from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
-
-from ml.tokenization.tokenizer import SubwordTokenizer
-from backend.app.schemas.translation import TranslationRequest, TranslationResponse, HistoryItem, ModelInfoResponse
 from backend.app.core.config import settings
+
+logger = logging.getLogger("nmt.service")
+
+DIRECTIONS = ("en-hi", "hi-en")
+
+
+class ModelNotAvailableError(RuntimeError):
+    """The requested translation direction has no trained model loaded."""
 
 
 class TranslationService:
-    """Service layer coordinating Transformer NMT models and tokenizers."""
-
     def __init__(self):
-        self.model: Optional[Any] = None
-        self.src_tokenizer: Optional[SubwordTokenizer] = None
-        self.tgt_tokenizer: Optional[SubwordTokenizer] = None
-        self.translator: Optional[Any] = None
-        self.is_ready: bool = False
-        self.history: List[HistoryItem] = []
+        self.translators: Dict[str, Any] = {}
+        self.metas: Dict[str, Dict[str, Any]] = {}
+        self.paths: Dict[str, str] = {}
+        self.device = "cpu"
+        self.load_errors: Dict[str, str] = {}
 
-    def initialize(self):
-        """Loads tokenizers, instantiates Transformer architecture, and loads weights if available."""
-        device = "cpu"
-        if TORCH_AVAILABLE and torch.cuda.is_available() and settings.DEVICE == "cuda":
-            device = "cuda"
+    @property
+    def is_ready(self) -> bool:
+        return bool(self.translators)
 
-        # Instantiate tokenizers
-        self.src_tokenizer = SubwordTokenizer(
-            model_path=settings.TOKENIZER_EN_PATH if os.path.exists(settings.TOKENIZER_EN_PATH) else None
-        )
-        self.tgt_tokenizer = SubwordTokenizer(
-            model_path=settings.TOKENIZER_HI_PATH if os.path.exists(settings.TOKENIZER_HI_PATH) else None
-        )
+    def checkpoint_paths(self) -> Dict[str, str]:
+        """Checkpoint per direction. models/serving.json (written by scripts/publish_models.py)
+        overrides the .env paths, so a newer model can be served without a config change."""
+        paths = {"en-hi": settings.MODEL_CHECKPOINT_PATH, "hi-en": settings.MODEL_CHECKPOINT_PATH_HI_EN}
+        manifest = os.path.join(settings.MODELS_DIR, "serving.json")
+        if os.path.exists(manifest):
+            try:
+                with open(manifest, encoding="utf-8") as f:
+                    for direction, rel in json.load(f).items():
+                        if direction in paths:
+                            paths[direction] = os.path.join(settings.MODELS_DIR, rel)
+            except (OSError, ValueError) as e:
+                logger.error("serving_manifest_invalid path=%s error=%s", manifest, e)
+        return paths
 
-        if TORCH_AVAILABLE:
-            from ml.transformer.model import TransformerSeq2Seq
-            from ml.inference.translator import Translator
+    def initialize(self) -> None:
+        """Loads every configured checkpoint (model + its own tokenizers)."""
+        import torch
+        from ml.inference.loader import load_translator
 
-            self.model = TransformerSeq2Seq(
-                src_vocab_size=self.src_tokenizer.vocab_size,
-                tgt_vocab_size=self.tgt_tokenizer.vocab_size,
-                d_model=256,
-                n_heads=8,
-                n_encoder_layers=4,
-                n_decoder_layers=4,
-                d_ff=1024,
-                dropout=0.1,
-            ).to(device)
+        self.translators, self.metas, self.paths, self.load_errors = {}, {}, {}, {}
+        self.device = "cuda" if settings.DEVICE == "cuda" and torch.cuda.is_available() else "cpu"
+        for direction, path in self.checkpoint_paths().items():
+            if not path or not os.path.exists(path):
+                self.load_errors[direction] = f"checkpoint not found: {path}"
+                continue
+            try:
+                translator, meta = load_translator(
+                    path, device=self.device,
+                    beam_size=settings.DEFAULT_BEAM_SIZE, alpha=settings.DEFAULT_LENGTH_PENALTY,
+                )
+            except Exception as e:  # CHECKPOINT_LOAD_FAILED: log, keep serving other directions
+                self.load_errors[direction] = str(e)
+                logger.error("checkpoint_load_failed direction=%s path=%s error=%s", direction, path, e)
+                continue
+            if meta.get("direction") != direction:
+                self.load_errors[direction] = f"{path} is a {meta.get('direction')} model"
+                logger.error("checkpoint_direction_mismatch direction=%s path=%s", direction, path)
+                continue
+            self.translators[direction] = translator
+            self.metas[direction] = meta
+            self.paths[direction] = path
+            logger.info("model_loaded direction=%s run=%s path=%s device=%s",
+                        direction, meta.get("run_name"), path, self.device)
 
-            if os.path.exists(settings.MODEL_CHECKPOINT_PATH):
-                try:
-                    ckpt = torch.load(settings.MODEL_CHECKPOINT_PATH, map_location=device)
-                    state_dict = ckpt.get("model_state_dict", ckpt)
-                    self.model.load_state_dict(state_dict)
-                    print(f"[+] Successfully loaded checkpoint from {settings.MODEL_CHECKPOINT_PATH}")
-                except Exception as e:
-                    print(f"[-] Could not load checkpoint: {e}. Model running in uninitialized mode.")
+    def translate(self, text: str, source_lang: str, target_lang: str, strategy: str,
+                  beam_size: int, alpha: float, max_len: int) -> Dict[str, Any]:
+        direction = f"{source_lang}-{target_lang}"
+        translator = self.translators.get(direction)
+        if translator is None:
+            raise ModelNotAvailableError(f"No trained {source_lang}->{target_lang} model is loaded yet.")
+        result = translator.translate(text=text, strategy=strategy, beam_size=beam_size,
+                                      alpha=alpha, max_len=min(max_len, settings.MAX_GEN_LENGTH))
+        result["model_version"] = self.metas[direction].get("run_name", "unknown")
+        return result
 
-            self.translator = Translator(
-                model=self.model,
-                src_tokenizer=self.src_tokenizer,
-                tgt_tokenizer=self.tgt_tokenizer,
-                device=device,
-                default_strategy=settings.DEFAULT_DECODING_STRATEGY,
-                beam_size=settings.DEFAULT_BEAM_SIZE,
-                alpha=settings.DEFAULT_LENGTH_PENALTY,
-            )
-
-        self.is_ready = True
-
-    def translate(self, req: TranslationRequest) -> TranslationResponse:
-        """Executes translation and logs to user history."""
-        if not self.is_ready:
-            self.initialize()
-
-        req_id = f"req_{uuid.uuid4().hex[:8]}"
-        start_time = time.time()
-
-        if self.translator is not None:
-            result = self.translator.translate(
-                text=req.source_text,
-                strategy=req.decoding_strategy,
-                beam_size=req.beam_size,
-                alpha=req.length_penalty,
-                max_len=req.max_length,
-            )
-            translated_text = result["translated_text"]
-            latency_ms = result["latency_ms"]
-            tokens_generated = result["tokens_generated"]
-        else:
-            translated_text = self._fallback_demonstration(req.source_text, req.source_lang, req.target_lang)
-            latency_ms = round((time.time() - start_time) * 1000.0, 2)
-            tokens_generated = len(translated_text.split())
-
-        # For demonstration if translation output is identical to source
-        if not translated_text.strip() or translated_text == req.source_text:
-            translated_text = self._fallback_demonstration(req.source_text, req.source_lang, req.target_lang)
-
-        item = HistoryItem(
-            id=req_id,
-            timestamp=datetime.utcnow().isoformat(),
-            source_text=req.source_text,
-            translated_text=translated_text,
-            direction=f"{req.source_lang}->{req.target_lang}",
-            strategy=req.decoding_strategy,
-            latency_ms=latency_ms,
-        )
-        self.history.insert(0, item)
-        self.history = self.history[:50]
-
-        return TranslationResponse(
-            request_id=req_id,
-            source_text=req.source_text,
-            translated_text=translated_text,
-            source_lang=req.source_lang,
-            target_lang=req.target_lang,
-            model_version="transformer-en-hi-v1-dev",
-            decoding_strategy=req.decoding_strategy,
-            latency_ms=latency_ms,
-            tokens_generated=tokens_generated,
-        )
-
-    def _fallback_demonstration(self, text: str, src_lang: str, tgt_lang: str) -> str:
-        sample_dict = {
-            "hello": "नमस्ते",
-            "hello world": "नमस्ते दुनिया",
-            "machine learning enables computers to learn from data.": "मशीन लर्निंग कंप्यूटर को डेटा से सीखने में सक्षम बनाता है।",
-            "machine learning is powerful.": "मशीन लर्निंग शक्तिशाली है।",
-            "artificial intelligence is transforming the world.": "कृत्रिम बुद्धिमत्ता दुनिया को बदल रही है।",
-            "welcome to our neural machine translation system.": "हमारे न्यूरल मशीन ट्रांसलेशन सिस्टम में आपका स्वागत है।",
+    def model_info(self, direction: str) -> Dict[str, Any]:
+        meta = self.metas[direction]
+        cfg = meta.get("model_config", {})
+        info: Dict[str, Any] = {
+            "direction": direction,
+            "run_name": meta.get("run_name", "unknown"),
+            "parameters": meta.get("total_parameters"),
+            "train_pairs": meta.get("train_pairs"),
+            "checkpoint": self.paths[direction],
+            "device": self.device,
+            "tokenizer_sha256": {side: meta.get("tokenizers", {}).get(side, {}).get("sha256")
+                                 for side in ("src", "tgt")},
         }
-        clean_text = text.strip().lower()
-        if clean_text in sample_dict and src_lang == "en":
-            return sample_dict[clean_text]
-        if src_lang == "en" and tgt_lang == "hi":
-            return f"[अनुवादित: {text}]"
-        return f"[Translated: {text}]"
-
-    def get_model_info(self) -> ModelInfoResponse:
-        device_str = "cpu"
-        if TORCH_AVAILABLE and torch.cuda.is_available() and settings.DEVICE == "cuda":
-            device_str = "cuda"
-
-        return ModelInfoResponse(
-            model_name="Custom Transformer Seq2Seq",
-            architecture="Encoder-Decoder Attention Network",
-            grounding="Vaswani et al. (NeurIPS 2017) 'Attention Is All You Need'",
-            source_languages=["en", "hi"],
-            target_languages=["hi", "en"],
-            d_model=256,
-            n_heads=8,
-            n_encoder_layers=4,
-            n_decoder_layers=4,
-            device=device_str,
-            dataset="IIT Bombay English-Hindi Parallel Corpus",
-            metrics={
-                "target_bleu_en_hi": 20.0,
-                "target_chrf2_en_hi": 45.0,
-                "target_bleu_hi_en": 22.0,
-                "target_chrf2_hi_en": 50.0,
-            },
-        )
+        for key in ("d_model", "n_heads", "n_encoder_layers", "n_decoder_layers", "d_ff",
+                    "src_vocab_size", "tgt_vocab_size"):
+            info[key] = cfg.get(key)
+        metrics_path = os.path.join(os.path.dirname(self.paths[direction]), "metrics.json")
+        if os.path.exists(metrics_path):
+            with open(metrics_path, encoding="utf-8") as f:
+                state = json.load(f).get("state", {})
+            info["trained_epochs"] = len(state.get("history", {}).get("epochs", []))
+            info["best_dev_bleu"] = state.get("best_score")
+        return info
 
 
 translation_service = TranslationService()

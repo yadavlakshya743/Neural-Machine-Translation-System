@@ -1,53 +1,29 @@
-"""Pydantic schemas for translation requests, responses, and model metadata."""
+"""Pydantic schemas: request validation (bounded inputs) and response contracts."""
 
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class TranslationRequest(BaseModel):
     source_text: str = Field(
-        ...,
-        min_length=1,
-        max_length=1000,
-        description="Source sentence or paragraph to be translated.",
-        json_schema_extra={"example": "Machine learning models learn representations directly from data."}
+        ..., min_length=1, max_length=1000,
+        description="Source text to translate (1-1000 characters).",
+        json_schema_extra={"example": "I am going to college."},
     )
-    source_lang: str = Field(
-        default="en",
-        description="Source language code ('en' or 'hi').",
-        json_schema_extra={"example": "en"}
-    )
-    target_lang: str = Field(
-        default="hi",
-        description="Target language code ('hi' or 'en').",
-        json_schema_extra={"example": "hi"}
-    )
-    decoding_strategy: str = Field(
-        default="beam_search",
-        description="Decoding strategy: 'greedy' or 'beam_search'.",
-        json_schema_extra={"example": "beam_search"}
-    )
-    beam_size: int = Field(
-        default=4,
-        ge=1,
-        le=10,
-        description="Beam width for beam search decoding.",
-        json_schema_extra={"example": 4}
-    )
-    length_penalty: float = Field(
-        default=0.6,
-        ge=0.0,
-        le=2.0,
-        description="Alpha parameter for length penalty.",
-        json_schema_extra={"example": 0.6}
-    )
-    max_length: int = Field(
-        default=128,
-        ge=10,
-        le=512,
-        description="Maximum tokens to generate.",
-        json_schema_extra={"example": 128}
-    )
+    source_lang: Literal["en", "hi"] = Field("en", description="Source language code.")
+    target_lang: Literal["en", "hi"] = Field("hi", description="Target language code.")
+    decoding_strategy: Literal["greedy", "beam_search"] = Field("beam_search")
+    beam_size: int = Field(4, ge=1, le=10, description="Beam width (beam search only).")
+    length_penalty: float = Field(0.6, ge=0.0, le=2.0, description="Length-penalty alpha.")
+    max_length: int = Field(128, ge=10, le=256, description="Maximum tokens to generate.")
+
+    @field_validator("source_text")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("source_text must contain non-whitespace characters")
+        return v
 
 
 class TranslationResponse(BaseModel):
@@ -58,10 +34,44 @@ class TranslationResponse(BaseModel):
     target_lang: str
     model_version: str
     decoding_strategy: str
+    beam_size: Optional[int] = None
     latency_ms: float
     tokens_generated: int
+    created_at: Optional[str] = None
 
 
+class TranslationHistoryPage(BaseModel):
+    total: int
+    items: List[TranslationResponse]
+
+
+class ModelInfo(BaseModel):
+    direction: str
+    run_name: str
+    architecture: str = "Transformer encoder-decoder (Vaswani et al., 2017)"
+    parameters: Optional[int] = None
+    d_model: Optional[int] = None
+    n_heads: Optional[int] = None
+    n_encoder_layers: Optional[int] = None
+    n_decoder_layers: Optional[int] = None
+    d_ff: Optional[int] = None
+    src_vocab_size: Optional[int] = None
+    tgt_vocab_size: Optional[int] = None
+    tokenizer_sha256: Dict[str, Optional[str]] = {}
+    train_pairs: Optional[int] = None
+    checkpoint: str
+    trained_epochs: Optional[int] = None
+    best_dev_bleu: Optional[float] = None
+    dataset: str = "IIT Bombay English-Hindi Parallel Corpus (official split)"
+    device: str
+
+
+class ModelsResponse(BaseModel):
+    loaded: List[ModelInfo]
+    missing_directions: List[str]
+
+
+# Backwards-compatible summary used by the original /models/info endpoint.
 class ModelInfoResponse(BaseModel):
     model_name: str
     architecture: str
@@ -75,13 +85,3 @@ class ModelInfoResponse(BaseModel):
     device: str
     dataset: str
     metrics: Dict[str, Any]
-
-
-class HistoryItem(BaseModel):
-    id: str
-    timestamp: str
-    source_text: str
-    translated_text: str
-    direction: str
-    strategy: str
-    latency_ms: float
