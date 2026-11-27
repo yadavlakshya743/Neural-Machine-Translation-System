@@ -1,7 +1,17 @@
 """Subword Tokenizer Interface and Preprocessing for English and Hindi."""
 
 from typing import List, Optional
+import hashlib
 import os
+
+
+def file_sha256(path: str) -> str:
+    """Content hash used to tie a checkpoint to the exact tokenizer it was trained with."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 class SubwordTokenizer:
@@ -50,6 +60,18 @@ class SubwordTokenizer:
             return [self.SOS_ID] + ids + [self.EOS_ID]
         return ids
 
+    @property
+    def sha256(self) -> Optional[str]:
+        if self.sp is not None and self.model_path:
+            return file_sha256(self.model_path)
+        return None
+
+    def encode_batch(self, texts: List[str]) -> List[List[int]]:
+        """Encodes many texts at once (no special tokens). Much faster than a Python loop."""
+        if self.sp is not None:
+            return self.sp.encode(texts, out_type=int)
+        return [self.encode(t, add_special_tokens=False) for t in texts]
+
     def decode(self, ids: List[int], skip_special_tokens: bool = True) -> str:
         """Decodes token IDs back to a text string."""
         if skip_special_tokens:
@@ -71,8 +93,15 @@ class SubwordTokenizer:
         vocab_size: int = 16000,
         model_type: str = "bpe",
         character_coverage: float = 1.0,
+        input_sentence_size: int = 2_000_000,
     ):
-        """Trains a SentencePiece model on a text corpus file."""
+        """Trains a SentencePiece model on a text corpus file.
+
+        At most `input_sentence_size` sentences are sampled so training on the full
+        1.6M-pair corpus stays fast and memory-bounded. Sampling is not guaranteed to be
+        deterministic, so the trained .model files are the reproducibility artifact: keep
+        them with every checkpoint (their sha256 is stored in the checkpoint).
+        """
         import sentencepiece as spm
 
         spm.SentencePieceTrainer.train(
@@ -81,6 +110,9 @@ class SubwordTokenizer:
             vocab_size=vocab_size,
             model_type=model_type,
             character_coverage=character_coverage,
+            input_sentence_size=input_sentence_size,
+            shuffle_input_sentence=True,
+            num_threads=os.cpu_count() or 1,
             pad_id=SubwordTokenizer.PAD_ID,
             bos_id=SubwordTokenizer.SOS_ID,
             eos_id=SubwordTokenizer.EOS_ID,

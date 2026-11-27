@@ -1,0 +1,48 @@
+# ==============================================================================
+# Final model: Transformer-base (Vaswani et al., 2017, Table 3 "base") for a 16 GB
+# Kaggle T4/P100. One GPU per direction; see experiments/train_kaggle.ipynb.
+#
+#   python scripts/train.py --config ml/configs/transformer_base.yaml --direction en-hi \
+#          --max_hours 10.5 --resume auto
+# ==============================================================================
+
+model:
+  name: "transformer_base"
+  d_model: 512
+  n_heads: 8
+  n_encoder_layers: 6
+  n_decoder_layers: 6
+  d_ff: 2048
+  dropout: 0.1
+  tie_embeddings: true
+
+data:
+  direction: "en-hi"
+  processed_dir: "data/processed"
+  tokenizer_dir: "ml/tokenization"
+  max_len: 128
+  max_tokens: 6000          # per micro-batch; lower to 4000 if you hit CUDA out-of-memory
+  max_train_samples: 0
+  num_workers: 2
+
+training:
+  seed: 42
+  epochs: 20                # upper bound; early stopping / time budget usually end it first
+  learning_rate: 0.0007     # peak LR (~= 512^-0.5 * 4000^-0.5, the paper's schedule peak)
+  warmup_steps: 4000
+  label_smoothing: 0.1
+  grad_clip: 1.0
+  weight_decay: 0.0001
+  accum_steps: 4            # ~24k tokens per update, close to the paper's ~25k
+  use_amp: true
+  patience: 3
+  select_metric: "bleu"
+  save_every_steps: 500
+  log_interval: 100
+  checkpoint_dir: "models"
+
+decoding:
+  strategy: "beam_search"
+  beam_size: 4
+  alpha: 0.6
+  max_len: 128

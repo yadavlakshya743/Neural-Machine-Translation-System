@@ -62,11 +62,9 @@ env.bak/
 venv.bak/
 
 # ML Models & Checkpoints
-models/*.pt
-models/*.pth
-models/*.bin
-models/*.safetensors
-models/*.ckpt
+models/*
+!models/.gitkeep
+# (trained runs are published to the Hugging Face model repo by scripts/publish_models.py)
 experiments/runs/
 *.log
 
@@ -97,3 +95,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Local SQLite database (users, translation history)
+*.db

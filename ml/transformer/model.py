@@ -22,10 +22,25 @@ class TransformerSeq2Seq(nn.Module):
         dropout: float = 0.1,
         pad_idx: int = 0,
         max_len: int = 5000,
+        tie_embeddings: bool = False,
     ):
         super().__init__()
         self.pad_idx = pad_idx
         self.d_model = d_model
+        # Everything needed to rebuild this exact architecture from a checkpoint.
+        self.config = {
+            "src_vocab_size": src_vocab_size,
+            "tgt_vocab_size": tgt_vocab_size,
+            "d_model": d_model,
+            "n_heads": n_heads,
+            "n_encoder_layers": n_encoder_layers,
+            "n_decoder_layers": n_decoder_layers,
+            "d_ff": d_ff,
+            "dropout": dropout,
+            "pad_idx": pad_idx,
+            "max_len": max_len,
+            "tie_embeddings": tie_embeddings,
+        }
 
         self.encoder = TransformerEncoder(
             vocab_size=src_vocab_size,
@@ -51,6 +66,15 @@ class TransformerSeq2Seq(nn.Module):
 
         # Initialize weights with Xavier uniform distribution
         self._init_weights()
+
+        # Share the target embedding matrix with the output projection
+        # (Press & Wolf, 2017; also used in Vaswani et al. 2017).
+        if tie_embeddings:
+            self.generator.weight = self.decoder.embedding.token_embedding.weight
+
+    @classmethod
+    def from_config(cls, config: dict) -> "TransformerSeq2Seq":
+        return cls(**config)
 
     def _init_weights(self):
         for p in self.parameters():

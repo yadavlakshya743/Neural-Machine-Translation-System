@@ -1,0 +1,41 @@
+# Production image: React UI + FastAPI API in one container (one URL, no CORS).
+# Used by Render (render.yaml) and, with a PRO account, Hugging Face Spaces.
+# Trained checkpoints are not baked in: scripts/fetch_models.py downloads the latest ones from
+# the Hugging Face model repo named in HF_MODEL_REPO when the container starts.
+
+FROM node:20-alpine AS web
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM python:3.11-slim
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    DEVICE=cpu \
+    FRONTEND_DIST=/app/frontend_dist \
+    DATABASE_URL=sqlite:////app/data/translation_history.db \
+    DATA_REPORT_PATH=/app/models/data_report.json \
+    HOME=/home/user
+
+RUN useradd -m -u 1000 user
+WORKDIR /app
+
+COPY deploy/requirements-serve.txt .
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir -r requirements-serve.txt
+
+COPY ml/ ml/
+COPY backend/ backend/
+COPY scripts/fetch_models.py scripts/fetch_models.py
+COPY --from=web /web/dist /app/frontend_dist
+RUN mkdir -p /app/models /app/data && chown -R user /app
+USER user
+
+# Render sets $PORT (default 10000); Hugging Face Spaces use 7860.
+EXPOSE 7860
+CMD ["sh", "-c", "python scripts/fetch_models.py && exec uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-7860} --workers 1"]
