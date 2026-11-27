@@ -64,7 +64,7 @@ class TranslationService:
                     beam_size=settings.DEFAULT_BEAM_SIZE, alpha=settings.DEFAULT_LENGTH_PENALTY,
                 )
             except Exception as e:  # CHECKPOINT_LOAD_FAILED: log, keep serving other directions
-                self.load_errors[direction] = str(e)
+                self.load_errors[direction] = f"{type(e).__name__}: {e}"
                 logger.error("checkpoint_load_failed direction=%s path=%s error=%s", direction, path, e)
                 continue
             if meta.get("direction") != direction:

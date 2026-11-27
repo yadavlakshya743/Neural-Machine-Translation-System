@@ -1,6 +1,6 @@
 """Health (liveness) and readiness (model loaded) response schemas."""
 
-from typing import List
+from typing import Dict, List
 
 from pydantic import BaseModel
 
@@ -16,5 +16,6 @@ class ReadinessResponse(BaseModel):
     model_loaded: bool
     loaded_directions: List[str]
     missing_directions: List[str]
+    load_errors: Dict[str, str] = {}   # why a direction is missing (CHECKPOINT_LOAD_FAILED etc.)
     device: str
     gpu_available: bool

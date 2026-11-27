@@ -1,10 +1,11 @@
-# Runtime-only dependencies for the deployed API (PyTorch CPU is installed separately).
-# Kept minimal so the container fits small free hosts (512 MB RAM).
-fastapi>=0.100.0
-uvicorn>=0.22.0
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-python-jose[cryptography]>=3.3.0
-sentencepiece>=0.1.99
-numpy>=1.24.0
-huggingface_hub>=0.24
+# Runtime-only dependencies for the deployed API, pinned to the versions tested locally
+# (PyTorch 2.6.0 CPU is installed separately in deploy/Dockerfile.web).
+fastapi==0.165.0
+uvicorn==0.54.0
+pydantic==2.14.3
+pydantic-settings==2.16.3
+python-jose[cryptography]==3.5.0
+cryptography==50.0.2
+sentencepiece==0.2.3
+numpy==2.4.6
+huggingface_hub==2.4.0

@@ -48,6 +48,7 @@ def readiness_check(response: Response):
         model_loaded=bool(loaded),
         loaded_directions=loaded,
         missing_directions=[d for d in DIRECTIONS if d not in loaded],
+        load_errors={d: msg[:300] for d, msg in translation_service.load_errors.items()},
         device=translation_service.device,
         gpu_available=torch.cuda.is_available(),
     )
