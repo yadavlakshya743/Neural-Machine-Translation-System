@@ -198,3 +198,20 @@ def test_tokenizer_mismatch_blocks_load(client, tmp_path):
     torch.save(ckpt, bad_dir / "best.pt")
     with pytest.raises(CheckpointMismatchError):
         load_checkpoint(str(bad_dir / "best.pt"))
+
+
+def test_checkpoint_with_windows_paths_loads(client, tmp_path):
+    """Checkpoints trained on Windows store 'ml\tokenization\spm_en.model'; Linux servers must
+    still find the tokenizer saved next to the checkpoint (regression: deploy failed on this)."""
+    from ml.inference.loader import load_checkpoint
+
+    ckpt = torch.load(client.ckpt_path, weights_only=False)
+    for side, name in (("src", "spm_en.model"), ("tgt", "spm_hi.model")):
+        ckpt["meta"]["tokenizers"][side]["path"] = "ml\tokenization\\" + name
+    run = tmp_path / "winrun"
+    run.mkdir()
+    for name in ("spm_en.model", "spm_hi.model"):
+        shutil.copy(os.path.join(os.path.dirname(client.ckpt_path), name), run / name)
+    torch.save(ckpt, run / "best.pt")
+    model, src_tok, tgt_tok, meta = load_checkpoint(str(run / "best.pt"))
+    assert src_tok.model_path.replace("\\", "/").endswith("winrun/spm_en.model")

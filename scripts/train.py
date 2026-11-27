@@ -127,7 +127,8 @@ def main():
 
     # Tokenizers: one per language, shared by both directions.
     tok_dir = d.get("tokenizer_dir", "ml/tokenization")
-    tok_path = {lang: os.path.join(tok_dir, f"spm_{lang}.model") for lang in ("en", "hi")}
+    # Forward slashes so checkpoints trained on Windows load on Linux servers too.
+    tok_path = {lang: f"{tok_dir}/spm_{lang}.model".replace("\\", "/") for lang in ("en", "hi")}
     for path in tok_path.values():
         if not os.path.exists(path):
             raise FileNotFoundError(f"{path} not found. Run scripts/prepare_data.py first.")

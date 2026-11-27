@@ -18,7 +18,10 @@ def _resolve(path: str, checkpoint_path: str) -> str:
     """Prefer the tokenizer copy saved next to the checkpoint (each run keeps its own, so a
     Kaggle-trained model works even if the local ml/tokenization files differ); fall back
     to the repo-relative path recorded at training time."""
-    alt = os.path.join(os.path.dirname(checkpoint_path), os.path.basename(path))
+    # Checkpoints trained on Windows store paths with backslashes, which Linux treats as part
+    # of the file name: normalize before taking the file name.
+    path = (path or "").replace("\\", "/")
+    alt = os.path.join(os.path.dirname(checkpoint_path), path.rsplit("/", 1)[-1])
     if path and os.path.exists(alt):
         return alt
     return path
