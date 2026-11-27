@@ -1,0 +1,19 @@
+# Render Blueprint: free web service built from deploy/Dockerfile.web.
+# Every push to main redeploys automatically. Trained models come from the Hugging Face
+# model repo below (update them with scripts/publish_models.py, then "Manual Deploy" or
+# restart the service on Render to load them).
+services:
+  - type: web
+    name: nmt-translator
+    runtime: docker
+    plan: free
+    dockerfilePath: ./deploy/Dockerfile.web
+    dockerContext: .
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: HF_MODEL_REPO
+        value: yadavlakshya743/nmt-en-hi-models
+      - key: SECRET_KEY
+        generateValue: true

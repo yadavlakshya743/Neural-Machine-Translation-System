@@ -285,6 +285,16 @@ training job is using the GPU.
 pytest tests/ -q        # 28 tests: model, training pipeline, decoding, API, auth, history isolation
 ```
 
+### 7. Deploy (free: Render + Hugging Face model repo)
+* **Models** live in a free Hugging Face model repo (`yadavlakshya743/nmt-en-hi-models`). Publish the
+  newest checkpoints at any time (safe while training): `python scripts/publish_models.py --repo yadavlakshya743/nmt-en-hi-models`.
+  For each direction the run with the best dev BLEU is served.
+* **App**: `render.yaml` defines a free Render web service built from `deploy/Dockerfile.web`
+  (React + FastAPI in one container). On render.com: *New → Blueprint →* select this repo.
+  Every push to `main` redeploys; a restart/redeploy also downloads the newest published models.
+* Free-tier limits: 512 MB RAM, shared CPU (translations take seconds), sleeps after 15 min idle
+  (~1 min to wake), and no persistent disk (accounts/history reset on restart).
+
 ---
 
 ## 10. API Specifications

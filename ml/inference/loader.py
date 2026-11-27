@@ -35,7 +35,12 @@ def load_checkpoint(
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    try:
+        # mmap: weights are read from the file on demand instead of being held twice in RAM
+        # while the state dict is copied into the model (matters on 512 MB hosts).
+        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False, mmap=True)
+    except (RuntimeError, TypeError):  # older checkpoint formats / torch versions
+        ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     meta = ckpt.get("meta") or {}
     model_cfg = meta.get("model_config")
     if not model_cfg:

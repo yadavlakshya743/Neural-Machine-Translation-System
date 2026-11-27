@@ -20,7 +20,7 @@ import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CODE_DIRS = ["ml", "backend", "frontend"]
-CODE_FILES = ["requirements.txt", "scripts/fetch_models.py"]
+CODE_FILES = ["requirements.txt", "deploy/requirements-serve.txt", "scripts/fetch_models.py"]
 SKIP = shutil.ignore_patterns("node_modules", "dist", "__pycache__", "*.pyc", "*.model", "*.vocab",
                               "*.pt", ".env", "*.db")
 
@@ -32,7 +32,7 @@ def assemble(stage: str) -> None:
     for f in CODE_FILES:
         os.makedirs(os.path.dirname(os.path.join(stage, f)) or stage, exist_ok=True)
         shutil.copy2(os.path.join(ROOT, f), os.path.join(stage, f))
-    shutil.copy2(os.path.join(ROOT, "deploy", "space", "Dockerfile"), os.path.join(stage, "Dockerfile"))
+    shutil.copy2(os.path.join(ROOT, "deploy", "Dockerfile.web"), os.path.join(stage, "Dockerfile"))
     shutil.copy2(os.path.join(ROOT, "deploy", "space", "README.md"), os.path.join(stage, "README.md"))
 
 
